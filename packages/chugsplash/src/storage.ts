@@ -2,6 +2,7 @@
 import { fromHexString, remove0x } from '@eth-optimism/core-utils'
 import { BigNumber, ethers } from 'ethers'
 import semver from 'semver'
+
 import { getBuildInfo, getContractArtifact } from './artifacts'
 
 // Represents the JSON objects outputted by the Solidity compiler that describe the structure of

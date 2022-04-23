@@ -3,13 +3,12 @@ import * as Handlebars from 'handlebars'
 import { ethers } from 'ethers'
 
 /* Imports: Internal */
-import { computeStorageSlots, getStorageLayout } from './storage'
+import { computeStorageSlots, SolidityStorageLayout } from './storage'
 import {
   ChugSplashAction,
   ChugSplashActionBundle,
   getChugSplashActionBundle,
 } from './actions'
-import { getContractArtifact } from './artifacts'
 
 type SolidityVariable =
   | boolean
@@ -34,6 +33,14 @@ export interface ChugSplashConfig {
       }
     }
   }
+}
+
+export interface ChugSplashConfigWithInputs extends ChugSplashConfig {
+  inputs: Array<{
+    solcVersion: string
+    solcLongVersion: string
+    input: any // TODO: Solidity compiler input
+  }>
 }
 
 /**
@@ -136,6 +143,12 @@ export const parseChugSplashConfig = (
  */
 export const makeActionBundleFromConfig = async (
   config: ChugSplashConfig,
+  artifacts: {
+    [name: string]: {
+      bytecode: string
+      storageLayout: SolidityStorageLayout
+    }
+  },
   env: {
     [key: string]: string | number | boolean
   } = {}
@@ -145,17 +158,21 @@ export const makeActionBundleFromConfig = async (
 
   const actions: ChugSplashAction[] = []
   for (const [, contractConfig] of Object.entries(parsed.contracts)) {
-    const artifact = await getContractArtifact(contractConfig.source)
-    const storageLayout = await getStorageLayout(contractConfig.source)
+    const artifact = artifacts[contractConfig.source]
 
     // Add a SET_CODE action for each contract first.
     actions.push({
       target: contractConfig.address,
-      code: artifact.deployedBytecode,
+      code: artifact.bytecode,
     })
 
+    // Compute our storage slots.
+    const slots = computeStorageSlots(
+      artifact.storageLayout,
+      contractConfig.variables
+    )
+
     // Add SET_STORAGE actions for each storage slot that we want to modify.
-    const slots = computeStorageSlots(storageLayout, contractConfig.variables)
     for (const slot of slots) {
       actions.push({
         target: contractConfig.address,
