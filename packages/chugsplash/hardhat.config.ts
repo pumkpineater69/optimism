@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from 'hardhat/config'
 
 // Hardhat plugins
+import 'hardhat-deploy'
 import '@nomiclabs/hardhat-ethers'
 import '@nomiclabs/hardhat-waffle'
 import '@typechain/hardhat'
@@ -19,6 +20,11 @@ const config: HardhatUserConfig = {
   typechain: {
     outDir: 'dist/types',
     target: 'ethers-v5',
+  },
+  namedAccounts: {
+    deployer: {
+      default: 0,
+    },
   },
 }
 

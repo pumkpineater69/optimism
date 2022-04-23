@@ -14,7 +14,6 @@ import fetch from 'node-fetch'
 import { add0x } from '@eth-optimism/core-utils'
 
 import {
-  parseChugSplashConfig,
   validateChugSplashConfig,
   makeActionBundleFromConfig,
   ChugSplashConfig,
@@ -26,7 +25,6 @@ import { getStorageLayout } from './storage'
 
 const TASK_CHUGSPLASH_LOAD = 'chugsplash:load'
 const TASK_CHUGSPLASH_BUNDLE = 'chugsplash:bundle'
-const TASK_CHUGSPLASH_DEPLOY = 'chugsplash:deploy'
 const TASK_CHUGSPLASH_VERIFY = 'chugsplash:verify'
 const TASK_CHUGSPLASH_COMMIT = 'chugsplash:commit'
 
@@ -132,22 +130,6 @@ task(TASK_CHUGSPLASH_COMMIT)
       console.log(configPublishResult['IpfsHash'])
     }
   )
-
-task(TASK_CHUGSPLASH_DEPLOY)
-  .setDescription('Deploys a system based on the given deployment file')
-  .addParam('deployConfig', 'path to chugsplash deploy config')
-  .setAction(async (args: { deployConfig: string }, hre) => {
-    const config = await hre.run(TASK_CHUGSPLASH_LOAD, {
-      deployConfig: args.deployConfig,
-    })
-    const bundle = await hre.run(TASK_CHUGSPLASH_BUNDLE, {
-      deployConfig: args.deployConfig,
-    })
-    console.log(
-      JSON.stringify(parseChugSplashConfig(config, process.env), null, 2)
-    )
-    console.log(bundle)
-  })
 
 task(TASK_CHUGSPLASH_VERIFY)
   .setDescription('Checks if a deployment config matches a bundle hash')
