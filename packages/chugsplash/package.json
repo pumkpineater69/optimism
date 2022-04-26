@@ -79,6 +79,7 @@
     "typechain": "^6.0.4"
   },
   "peerDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2",
     "hardhat": "^2.3.0"
   }
 }

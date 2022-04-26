@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from 'fs'
 
-import { subtask, task } from 'hardhat/config'
+import { subtask, task, types } from 'hardhat/config'
 import { SolcBuild } from 'hardhat/types'
 import {
   TASK_COMPILE,
@@ -12,6 +12,7 @@ import {
 import pinataSDK from '@pinata/sdk'
 import fetch from 'node-fetch'
 import { add0x } from '@eth-optimism/core-utils'
+import { ethers } from 'ethers'
 
 import {
   validateChugSplashConfig,
@@ -22,15 +23,18 @@ import {
 import { ChugSplashActionBundle } from './actions'
 import { getContractArtifact } from './artifacts'
 import { getStorageLayout } from './storage'
+import { ChugSplashRegistryABI, ChugSplashManagerABI } from './ifaces'
 
 const TASK_CHUGSPLASH_LOAD = 'chugsplash:load'
-const TASK_CHUGSPLASH_BUNDLE = 'chugsplash:bundle'
+const TASK_CHUGSPLASH_BUNDLE_LOCAL = 'chugsplash:bundle:local'
+const TASK_CHUGSPLASH_BUNDLE_REMOTE = 'chugsplash:bundle:remote'
 const TASK_CHUGSPLASH_VERIFY = 'chugsplash:verify'
 const TASK_CHUGSPLASH_COMMIT = 'chugsplash:commit'
+const TASK_CHUGSPLASH_FETCH = 'chugsplash:fetch'
+const TASK_CHUGSPLASH_EXECUTE = 'chugsplash:execute'
 
 subtask(TASK_CHUGSPLASH_LOAD)
-  .setDescription('Loads a ChugSplash config file')
-  .addParam('deployConfig', 'path to chugsplash deploy config')
+  .addParam('deployConfig', undefined, undefined, types.string)
   .setAction(
     async (args: { deployConfig: string }, hre): Promise<ChugSplashConfig> => {
       // Make sure we have the latest compiled code.
@@ -43,9 +47,8 @@ subtask(TASK_CHUGSPLASH_LOAD)
     }
   )
 
-subtask(TASK_CHUGSPLASH_BUNDLE)
-  .setDescription('Bundles a ChugSplash config file')
-  .addParam('deployConfig', 'path to chugsplash deploy config')
+subtask(TASK_CHUGSPLASH_BUNDLE_LOCAL)
+  .addParam('deployConfig', undefined, undefined, types.string)
   .setAction(
     async (
       args: { deployConfig: string },
@@ -66,6 +69,80 @@ subtask(TASK_CHUGSPLASH_BUNDLE)
       }
 
       return makeActionBundleFromConfig(config, artifacts, process.env)
+    }
+  )
+
+subtask(TASK_CHUGSPLASH_BUNDLE_REMOTE)
+  .addParam('deployConfig', undefined, undefined, types.any)
+  .setAction(
+    async (
+      args: { deployConfig: ChugSplashConfigWithInputs },
+      hre
+    ): Promise<ChugSplashActionBundle> => {
+      const artifacts = {}
+      for (const input of args.deployConfig.inputs) {
+        const solcBuild: SolcBuild = await hre.run(
+          TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD,
+          {
+            quiet: true,
+            solcVersion: input.solcVersion,
+          }
+        )
+
+        let output: any // TODO: Compiler output
+        if (solcBuild.isSolcJs) {
+          output = await hre.run(TASK_COMPILE_SOLIDITY_RUN_SOLCJS, {
+            input: input.input,
+            solcJsPath: solcBuild.compilerPath,
+          })
+        } else {
+          output = await hre.run(TASK_COMPILE_SOLIDITY_RUN_SOLC, {
+            input: input.input,
+            solcPath: solcBuild.compilerPath,
+          })
+        }
+
+        for (const fileOutput of Object.values(output.contracts)) {
+          for (const [contractName, contractOutput] of Object.entries(
+            fileOutput
+          )) {
+            artifacts[contractName] = {
+              bytecode: add0x(contractOutput.evm.deployedBytecode.object),
+              storageLayout: contractOutput.storageLayout,
+            }
+          }
+        }
+      }
+
+      return makeActionBundleFromConfig(
+        args.deployConfig,
+        artifacts,
+        process.env
+      )
+    }
+  )
+
+subtask(TASK_CHUGSPLASH_FETCH)
+  .addParam('configUri', undefined, undefined, types.string)
+  .setAction(
+    async (args: {
+      configUri: string
+    }): Promise<ChugSplashConfigWithInputs> => {
+      let config: ChugSplashConfigWithInputs
+      if (args.configUri.startsWith('ipfs://')) {
+        config = await (
+          await fetch(
+            `https://cloudflare-ipfs.com/ipfs/${args.configUri.replace(
+              'ipfs://',
+              ''
+            )}`
+          )
+        ).json()
+      } else {
+        throw new Error('unsupported URI type')
+      }
+
+      return config
     }
   )
 
@@ -142,63 +219,84 @@ task(TASK_CHUGSPLASH_VERIFY)
         bundleHash: string
       },
       hre
-    ) => {
-      let config: ChugSplashConfigWithInputs
-      if (args.configUri.startsWith('ipfs://')) {
-        config = await (
-          await fetch(
-            `https://cloudflare-ipfs.com/ipfs/${args.configUri.replace(
-              'ipfs://',
-              ''
-            )}`
-          )
-        ).json()
-      } else {
-        throw new Error('unsupported URI type')
-      }
-
-      const artifacts = {}
-      for (const input of config.inputs) {
-        const solcBuild: SolcBuild = await hre.run(
-          TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD,
-          {
-            quiet: true,
-            solcVersion: input.solcVersion,
-          }
-        )
-
-        let output: any // TODO: Compiler output
-        if (solcBuild.isSolcJs) {
-          output = await hre.run(TASK_COMPILE_SOLIDITY_RUN_SOLCJS, {
-            input: input.input,
-            solcJsPath: solcBuild.compilerPath,
-          })
-        } else {
-          output = await hre.run(TASK_COMPILE_SOLIDITY_RUN_SOLC, {
-            input: input.input,
-            solcPath: solcBuild.compilerPath,
-          })
+    ): Promise<{
+      config: ChugSplashConfigWithInputs
+      bundle: ChugSplashActionBundle
+    }> => {
+      const config: ChugSplashConfigWithInputs = await hre.run(
+        TASK_CHUGSPLASH_FETCH,
+        {
+          configUri: args.configUri,
         }
-
-        for (const fileOutput of Object.values(output.contracts)) {
-          for (const [contractName, contractOutput] of Object.entries(
-            fileOutput
-          )) {
-            artifacts[contractName] = {
-              bytecode: add0x(contractOutput.evm.deployedBytecode.object),
-              storageLayout: contractOutput.storageLayout,
-            }
-          }
-        }
-      }
-
-      const bundle = await makeActionBundleFromConfig(
-        config,
-        artifacts,
-        process.env
       )
 
-      const ok = bundle.root === args.bundleHash
-      console.log(`${ok ? 'OK' : 'FAIL'}`)
+      const bundle: ChugSplashActionBundle = await hre.run(
+        TASK_CHUGSPLASH_BUNDLE_REMOTE,
+        {
+          deployConfig: config,
+        }
+      )
+
+      if (bundle.root !== args.bundleHash) {
+        throw new Error('bundle hash does not match')
+      }
+
+      return {
+        config,
+        bundle,
+      }
+    }
+  )
+
+task(TASK_CHUGSPLASH_EXECUTE)
+  .setDescription('Executes a deployment to completion')
+  .addParam('configUri', 'location of the config file')
+  .addParam('bundleHash', 'hash of the bundle')
+  .addParam('registry', 'registry address')
+  .addParam('executor', 'deployer address')
+  .setAction(
+    async (
+      args: {
+        configUri: string
+        bundleHash: string
+        registry: string
+        executor: string
+      },
+      hre: any
+    ) => {
+      const {
+        config,
+        bundle,
+      }: {
+        config: ChugSplashConfigWithInputs
+        bundle: ChugSplashActionBundle
+      } = await hre.run(TASK_CHUGSPLASH_VERIFY, {
+        configUri: args.configUri,
+        bundleHash: args.bundleHash,
+      })
+
+      if (!hre.ethers) {
+        throw new Error('install @nomiclabs/hardhat-ethers to use this task')
+      }
+
+      // Will throw if signer is not unlocked
+      const signer = await hre.ethers.getSigner(args.executor)
+
+      const ChugSplashRegistry = new ethers.Contract(
+        args.registry,
+        ChugSplashRegistryABI,
+        signer
+      )
+
+      const manager = await ChugSplashRegistry.registry(config.options.name)
+      if (manager === ethers.constants.AddressZero) {
+        throw new Error(`no manager found for name: ${config.options.name}`)
+      }
+
+      const ChugSplashManager = new ethers.Contract(
+        manager,
+        ChugSplashManagerABI,
+        signer
+      )
     }
   )

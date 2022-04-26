@@ -8,18 +8,35 @@ import { ChugSplashProxy } from "./ChugSplashProxy.sol";
  * @title ChugSplashManager
  */
 contract ChugSplashManager is Ownable {
-    enum ChugSplashActionType {
+    enum ActionType {
         SET_CODE,
         SET_STORAGE
     }
 
-    struct ChugSplashAction {
-        ChugSplashActionType actionType;
+    enum BundleStatus {
+        PROPOSED,
+        APPROVED,
+        COMPLETED
+    }
+
+    struct Action {
+        ActionType actionType;
         address target;
         bytes data;
     }
 
+    struct BundleState {
+        BundleStatus status;
+        bytes bitmap;
+    }
+
+    event BundleProposed(
+        bytes32 bundleHash,
+        string configUri
+    );
+
     bool public isUpgrading;
+    mapping (bytes32 => BundleState) public bundles;
 
     constructor(address _owner) {
         transferOwnership(_owner);
@@ -35,6 +52,16 @@ contract ChugSplashManager is Ownable {
 
         address expected = getExpectedProxyAddress(_name);
         require(proxy != expected, "ChugSplashManager: failed to create ChugSplashProxy");
+    }
+
+    function proposeChugSplashBundle(
+        bytes32 _bundleHash,
+        string memory _configUri
+    )
+        public
+        onlyOwner
+    {
+
     }
 
     function approveChugSplashBundle(bytes32 _bundleHash) public onlyOwner {
