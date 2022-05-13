@@ -236,9 +236,13 @@ library Lib_MerkleTrie {
         Lib_RLPReader.RLPItem[] memory nodes = Lib_RLPReader.readList(_proof);
         TrieNode[] memory proof = new TrieNode[](nodes.length);
 
-        for (uint256 i = 0; i < nodes.length; i++) {
+        uint256 length = nodes.length;
+        for (uint256 i = 0; i < length; ) {
             bytes memory encoded = Lib_RLPReader.readBytes(nodes[i]);
             proof[i] = TrieNode({ encoded: encoded, decoded: Lib_RLPReader.readList(encoded) });
+            unchecked {
+                ++i;
+            }
         }
 
         return proof;
