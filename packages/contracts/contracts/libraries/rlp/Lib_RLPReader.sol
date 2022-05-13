@@ -67,12 +67,12 @@ library Lib_RLPReader {
         uint256 itemCount = 0;
         uint256 offset = listOffset;
         while (offset < _in.length) {
-            require(itemCount < MAX_LIST_LENGTH, "Provided RLP list exceeds max list length.");
-
             (uint256 itemOffset, uint256 itemLength, ) = _decodeLength(
                 RLPItem({ length: _in.length - offset, ptr: _in.ptr + offset })
             );
 
+            // Solidity will perform runtime checks to guarantee that itemCount is less than the
+            // length of `out`.
             out[itemCount] = RLPItem({ length: itemLength + itemOffset, ptr: _in.ptr + offset });
 
             itemCount += 1;
