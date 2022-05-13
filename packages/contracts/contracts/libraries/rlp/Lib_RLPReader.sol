@@ -345,34 +345,24 @@ library Lib_RLPReader {
         uint256 _length
     ) private pure returns (bytes memory) {
         bytes memory out = new bytes(_length);
-        if (out.length == 0) {
-            return out;
-        }
-
-        uint256 src = _src + _offset;
-        uint256 dest;
         assembly {
-            dest := add(out, 32)
-        }
+            let src := add(_src, _offset)
+            let dst := add(out, 32)
+            mstore(out, _length)
+            mstore(0x40, add(dst, _length))
 
-        // Copy over as many complete words as we can.
-        for (uint256 i = 0; i < _length / 32; i++) {
-            assembly {
-                mstore(dest, mload(src))
+            let i := 0
+            for {
+
+            } lt(i, _length) {
+                i := add(i, 32)
+            } {
+                mstore(add(dst, i), mload(add(src, i)))
             }
 
-            src += 32;
-            dest += 32;
-        }
-
-        // Pick out the remaining bytes.
-        uint256 mask;
-        unchecked {
-            mask = 256**(32 - (_length % 32)) - 1;
-        }
-
-        assembly {
-            mstore(dest, or(and(mload(src), not(mask)), and(mload(dest), mask)))
+            if gt(i, _length) {
+                mstore(add(dst, _length), 0)
+            }
         }
         return out;
     }
