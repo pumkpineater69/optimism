@@ -25,10 +25,6 @@ contract TestLib_BytesUtils {
         return Lib_BytesUtils.slice(_bytes, _start, _length);
     }
 
-    function toBytes32(bytes memory _bytes) public pure returns (bytes32) {
-        return Lib_BytesUtils.toBytes32(_bytes);
-    }
-
     function toUint256(bytes memory _bytes) public pure returns (uint256) {
         return Lib_BytesUtils.toUint256(_bytes);
     }
