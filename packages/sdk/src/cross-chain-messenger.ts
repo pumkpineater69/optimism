@@ -8,11 +8,10 @@ import {
 } from '@ethersproject/abstract-provider'
 import { Signer } from '@ethersproject/abstract-signer'
 import { ethers, BigNumber, Overrides, CallOverrides } from 'ethers'
-import { sleep, remove0x } from '@eth-optimism/core-utils'
+import { sleep, remove0x, getChainId } from '@eth-optimism/core-utils'
 import { predeploys } from '@eth-optimism/contracts'
 
 import {
-  ICrossChainMessenger,
   OEContracts,
   OEContractsLike,
   MessageLike,
@@ -50,10 +49,22 @@ import {
   CHAIN_BLOCK_TIMES,
 } from './utils'
 
-export class CrossChainMessenger implements ICrossChainMessenger {
+interface CrossChainMessengerOptions {
+  l1SignerOrProvider: SignerOrProviderLike
+  l2SignerOrProvider: SignerOrProviderLike
+  depositConfirmationBlocks?: NumberLike
+  l1BlockTimeSeconds?: NumberLike
+  contracts?: DeepPartial<OEContractsLike>
+  bridges?: BridgeAdapterData
+}
+
+export class CrossChainMessenger {
   public l1SignerOrProvider: Signer | Provider
   public l2SignerOrProvider: Signer | Provider
+  public initialized: boolean
+  public initializing: boolean
   public l1ChainId: number
+  public l2ChainId: number
   public contracts: OEContracts
   public bridges: BridgeAdapters
   public depositConfirmationBlocks: number
@@ -65,24 +76,15 @@ export class CrossChainMessenger implements ICrossChainMessenger {
    * @param opts Options for the provider.
    * @param opts.l1SignerOrProvider Signer or Provider for the L1 chain, or a JSON-RPC url.
    * @param opts.l2SignerOrProvider Signer or Provider for the L2 chain, or a JSON-RPC url.
-   * @param opts.l1ChainId Chain ID for the L1 chain.
    * @param opts.depositConfirmationBlocks Optional number of blocks before a deposit is confirmed.
    * @param opts.l1BlockTimeSeconds Optional estimated block time in seconds for the L1 chain.
    * @param opts.contracts Optional contract address overrides.
    * @param opts.bridges Optional bridge address list.
    */
-  constructor(opts: {
-    l1SignerOrProvider: SignerOrProviderLike
-    l2SignerOrProvider: SignerOrProviderLike
-    l1ChainId: NumberLike
-    depositConfirmationBlocks?: NumberLike
-    l1BlockTimeSeconds?: NumberLike
-    contracts?: DeepPartial<OEContractsLike>
-    bridges?: BridgeAdapterData
-  }) {
+  constructor(private readonly opts: CrossChainMessengerOptions) {
     this.l1SignerOrProvider = toSignerOrProvider(opts.l1SignerOrProvider)
     this.l2SignerOrProvider = toSignerOrProvider(opts.l2SignerOrProvider)
-    this.l1ChainId = toNumber(opts.l1ChainId)
+    this.initialized = false
 
     this.depositConfirmationBlocks =
       opts?.depositConfirmationBlocks !== undefined
@@ -94,15 +96,27 @@ export class CrossChainMessenger implements ICrossChainMessenger {
         ? toNumber(opts.l1BlockTimeSeconds)
         : CHAIN_BLOCK_TIMES[this.l1ChainId] || 1
 
-    this.contracts = getAllOEContracts(this.l1ChainId, {
-      l1SignerOrProvider: this.l1SignerOrProvider,
-      l2SignerOrProvider: this.l2SignerOrProvider,
-      overrides: opts.contracts,
-    })
+    return new Proxy(this, {
+      get: (target, key) => {
+        if (
+          !['init', 'initializing', 'initialized'].includes(key as string) &&
+          !this.initializing &&
+          !this.initialized
+        ) {
+          throw new Error(`messenger is not initialized, did you call init()?`)
+        }
 
-    this.bridges = getBridgeAdapters(this.l1ChainId, this, {
-      overrides: opts.bridges,
+        return target[key]
+      },
     })
+  }
+
+  public static async new(
+    opts: CrossChainMessengerOptions
+  ): Promise<CrossChainMessenger> {
+    const messenger = new CrossChainMessenger(opts)
+    await messenger.init()
+    return messenger
   }
 
   get l1Provider(): Provider {
@@ -135,6 +149,30 @@ export class CrossChainMessenger implements ICrossChainMessenger {
     } else {
       return this.l2SignerOrProvider
     }
+  }
+
+  public async init(): Promise<void> {
+    if (this.initialized || this.initializing) {
+      return
+    }
+
+    this.initializing = true
+
+    this.l1ChainId = await getChainId(this.l1Provider)
+    this.l2ChainId = await getChainId(this.l2Provider)
+
+    this.contracts = getAllOEContracts(this.l2ChainId, {
+      l1SignerOrProvider: this.l1SignerOrProvider,
+      l2SignerOrProvider: this.l2SignerOrProvider,
+      overrides: this.opts.contracts,
+    })
+
+    this.bridges = getBridgeAdapters(this.l2ChainId, this, {
+      overrides: this.opts.bridges,
+    })
+
+    this.initialized = true
+    this.initializing = false
   }
 
   public async getMessagesByTransaction(

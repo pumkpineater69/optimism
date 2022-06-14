@@ -27,11 +27,10 @@ describe('CrossChainMessenger', () => {
 
   describe('construction', () => {
     describe('when given an ethers provider for the L1 provider', () => {
-      it('should use the provider as the L1 provider', () => {
-        const messenger = new CrossChainMessenger({
+      it('should use the provider as the L1 provider', async () => {
+        const messenger = await CrossChainMessenger.new({
           l1SignerOrProvider: ethers.provider,
           l2SignerOrProvider: ethers.provider,
-          l1ChainId: 1,
         })
 
         expect(messenger.l1Provider).to.equal(ethers.provider)
@@ -39,51 +38,25 @@ describe('CrossChainMessenger', () => {
     })
 
     describe('when given an ethers provider for the L2 provider', () => {
-      it('should use the provider as the L2 provider', () => {
-        const messenger = new CrossChainMessenger({
+      it('should use the provider as the L2 provider', async () => {
+        const messenger = await CrossChainMessenger.new({
           l1SignerOrProvider: ethers.provider,
           l2SignerOrProvider: ethers.provider,
-          l1ChainId: 1,
         })
 
         expect(messenger.l2Provider).to.equal(ethers.provider)
       })
     })
 
-    describe('when given a string as the L1 provider', () => {
-      it('should create a JSON-RPC provider for the L1 provider', () => {
-        const messenger = new CrossChainMessenger({
-          l1SignerOrProvider: 'https://localhost:8545',
-          l2SignerOrProvider: ethers.provider,
-          l1ChainId: 1,
-        })
-
-        expect(Provider.isProvider(messenger.l1Provider)).to.be.true
-      })
-    })
-
-    describe('when given a string as the L2 provider', () => {
-      it('should create a JSON-RPC provider for the L2 provider', () => {
-        const messenger = new CrossChainMessenger({
-          l1SignerOrProvider: ethers.provider,
-          l2SignerOrProvider: 'https://localhost:8545',
-          l1ChainId: 1,
-        })
-
-        expect(Provider.isProvider(messenger.l2Provider)).to.be.true
-      })
-    })
-
     describe('when no custom contract addresses are provided', () => {
       describe('when given a known chain ID', () => {
-        it('should use the contract addresses for the known chain ID', () => {
-          const messenger = new CrossChainMessenger({
+        it('should use the contract addresses for the known chain ID', async () => {
+          const messenger = await CrossChainMessenger.new({
             l1SignerOrProvider: ethers.provider,
-            l2SignerOrProvider: 'https://localhost:8545',
-            l1ChainId: 1,
+            l2SignerOrProvider: ethers.provider,
           })
 
-          const addresses = CONTRACT_ADDRESSES[1]
+          const addresses = CONTRACT_ADDRESSES[31337]
           for (const [contractName, contractAddress] of Object.entries(
             addresses.l1
           )) {
@@ -98,23 +71,11 @@ describe('CrossChainMessenger', () => {
           }
         })
       })
-
-      describe('when given an unknown chain ID', () => {
-        it('should throw an error', () => {
-          expect(() => {
-            new CrossChainMessenger({
-              l1SignerOrProvider: ethers.provider,
-              l2SignerOrProvider: 'https://localhost:8545',
-              l1ChainId: 1234,
-            })
-          }).to.throw()
-        })
-      })
     })
 
     describe('when custom contract addresses are provided', () => {
       describe('when given a known chain ID', () => {
-        it('should use known addresses except where custom addresses are given', () => {
+        it('should use known addresses except where custom addresses are given', async () => {
           const overrides = {
             l1: {
               L1CrossDomainMessenger: '0x' + '11'.repeat(20),
@@ -123,14 +84,13 @@ describe('CrossChainMessenger', () => {
               L2CrossDomainMessenger: '0x' + '22'.repeat(20),
             },
           }
-          const messenger = new CrossChainMessenger({
+          const messenger = await CrossChainMessenger.new({
             l1SignerOrProvider: ethers.provider,
-            l2SignerOrProvider: 'https://localhost:8545',
-            l1ChainId: 1,
+            l2SignerOrProvider: ethers.provider,
             contracts: overrides,
           })
 
-          const addresses = CONTRACT_ADDRESSES[1]
+          const addresses = CONTRACT_ADDRESSES[31337]
           for (const [contractName, contractAddress] of Object.entries(
             addresses.l1
           )) {
@@ -158,7 +118,7 @@ describe('CrossChainMessenger', () => {
 
       describe('when given an unknown chain ID', () => {
         describe('when all L1 addresses are provided', () => {
-          it('should use custom addresses where provided', () => {
+          it('should use custom addresses where provided', async () => {
             const overrides = {
               l1: {
                 AddressManager: '0x' + '11'.repeat(20),
@@ -172,14 +132,13 @@ describe('CrossChainMessenger', () => {
                 L2CrossDomainMessenger: '0x' + '22'.repeat(20),
               },
             }
-            const messenger = new CrossChainMessenger({
+            const messenger = await CrossChainMessenger.new({
               l1SignerOrProvider: ethers.provider,
-              l2SignerOrProvider: 'https://localhost:8545',
-              l1ChainId: 1234,
+              l2SignerOrProvider: ethers.provider,
               contracts: overrides,
             })
 
-            const addresses = CONTRACT_ADDRESSES[1]
+            const addresses = CONTRACT_ADDRESSES[31337]
             for (const [contractName, contractAddress] of Object.entries(
               addresses.l1
             )) {
@@ -204,29 +163,6 @@ describe('CrossChainMessenger', () => {
             }
           })
         })
-
-        describe('when not all L1 addresses are provided', () => {
-          it('should throw an error', () => {
-            expect(() => {
-              new CrossChainMessenger({
-                l1SignerOrProvider: ethers.provider,
-                l2SignerOrProvider: 'https://localhost:8545',
-                l1ChainId: 1234,
-                contracts: {
-                  l1: {
-                    // Missing some required L1 addresses
-                    AddressManager: '0x' + '11'.repeat(20),
-                    L1CrossDomainMessenger: '0x' + '12'.repeat(20),
-                    L1StandardBridge: '0x' + '13'.repeat(20),
-                  },
-                  l2: {
-                    L2CrossDomainMessenger: '0x' + '22'.repeat(20),
-                  },
-                },
-              })
-            }).to.throw()
-          })
-        })
       })
     })
   })
@@ -243,10 +179,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockMessenger')
       ).deploy()) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: ethers.provider,
         l2SignerOrProvider: ethers.provider,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,
@@ -430,10 +365,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockBridge')
       ).deploy(l2Messenger.address)) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: ethers.provider,
         l2SignerOrProvider: ethers.provider,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,
@@ -554,10 +488,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockMessenger')
       ).deploy()) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: ethers.provider,
         l2SignerOrProvider: ethers.provider,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,
@@ -758,10 +691,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockBridge')
       ).deploy(l2Messenger.address)) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: ethers.provider,
         l2SignerOrProvider: ethers.provider,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,
@@ -907,10 +839,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockMessenger')
       ).deploy()) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: ethers.provider,
         l2SignerOrProvider: ethers.provider,
-        l1ChainId: 31337,
         contracts: {
           l2: {
             L2CrossDomainMessenger: l2Messenger.address,
@@ -1011,10 +942,9 @@ describe('CrossChainMessenger', () => {
   describe('estimateL2MessageGasLimit', () => {
     let messenger: CrossChainMessenger
     beforeEach(async () => {
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: ethers.provider,
         l2SignerOrProvider: ethers.provider,
-        l1ChainId: 31337,
       })
     })
 
@@ -1114,10 +1044,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockMessenger')
       ).deploy()) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: ethers.provider,
         l2SignerOrProvider: ethers.provider,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,
@@ -1272,10 +1201,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockMessenger')
       ).deploy()) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: l1Signer,
         l2SignerOrProvider: l2Signer,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,
@@ -1367,10 +1295,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockMessenger')
       ).deploy()) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: l1Signer,
         l2SignerOrProvider: l2Signer,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,
@@ -1463,10 +1390,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockBridge')
       ).deploy(l2Messenger.address)) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: l1Signer,
         l2SignerOrProvider: l2Signer,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,
@@ -1519,10 +1445,9 @@ describe('CrossChainMessenger', () => {
         await ethers.getContractFactory('MockBridge')
       ).deploy(l2Messenger.address)) as any
 
-      messenger = new CrossChainMessenger({
+      messenger = await CrossChainMessenger.new({
         l1SignerOrProvider: l1Signer,
         l2SignerOrProvider: l2Signer,
-        l1ChainId: 31337,
         contracts: {
           l1: {
             L1CrossDomainMessenger: l1Messenger.address,

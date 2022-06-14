@@ -6,17 +6,28 @@ import {
 import { Signer } from '@ethersproject/abstract-signer'
 import { Contract, BigNumber } from 'ethers'
 
-import { ICrossChainMessenger } from './cross-chain-messenger'
+import { CrossChainMessenger } from '../cross-chain-messenger'
 import { IBridgeAdapter } from './bridge-adapter'
 
 /**
- * Commonly used Chain IDs
+ * L1 chain IDs
  */
-export enum Chain {
-  MAINNET = 1,
+export enum L1ChainID {
+  ETHEREUM = 1,
   GOERLI = 5,
   KOVAN = 42,
   HARDHAT_LOCAL = 31337,
+}
+
+/**
+ * L2 chain IDs
+ */
+export enum L2ChainID {
+  OPTIMISM = 10,
+  OPTIMISM_GOERLI = 420,
+  OPTIMISM_KOVAN = 69,
+  OPTIMISM_HARDHAT_LOCAL = 31337,
+  OPTIMISM_HARDHAT_LOCAL_CI = 17,
 }
 
 /**
@@ -86,7 +97,7 @@ export interface OEContractsLike {
 export interface BridgeAdapterData {
   [name: string]: {
     Adapter: new (opts: {
-      messenger: ICrossChainMessenger
+      messenger: CrossChainMessenger
       l1Bridge: AddressLike
       l2Bridge: AddressLike
     }) => IBridgeAdapter
