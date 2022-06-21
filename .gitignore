@@ -23,6 +23,7 @@ packages/contracts-periphery/@openzeppelin*
 packages/contracts-periphery/hardhat*
 
 packages/data-transport-layer/db
+packages/turbo-dtl/db
 
 packages/integration-tests-bedrock/cache
 packages/integration-tests-bedrock/artifacts
