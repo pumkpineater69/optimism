@@ -68,6 +68,7 @@ type SyncService struct {
 	signer                         types.Signer
 	feeThresholdUp                 *big.Float
 	feeThresholdDown               *big.Float
+	monorailHfBlock                uint64
 }
 
 // NewSyncService returns an initialized sync service
@@ -143,6 +144,7 @@ func NewSyncService(ctx context.Context, cfg Config, txpool *core.TxPool, bc *co
 		signer:                         types.NewEIP155Signer(chainID),
 		feeThresholdDown:               cfg.FeeThresholdDown,
 		feeThresholdUp:                 cfg.FeeThresholdUp,
+		monorailHfBlock:                cfg.MonorailHfBlock,
 	}
 
 	// The chainHeadSub is used to synchronize the SyncService with the chain.
@@ -848,9 +850,6 @@ func (s *SyncService) applyTransactionToTip(tx *types.Transaction) error {
 	} else if tx.L1Timestamp() == 0 && s.verifier {
 		// This should never happen
 		log.Error("No tx timestamp found when running as verifier", "hash", tx.Hash().Hex())
-	} else if tx.L1Timestamp() < ts {
-		// This should never happen, but sometimes does
-		log.Error("Timestamp monotonicity violation", "hash", tx.Hash().Hex(), "latest", ts, "tx", tx.L1Timestamp())
 	}
 
 	l1BlockNumber := tx.L1BlockNumber()
@@ -859,16 +858,6 @@ func (s *SyncService) applyTransactionToTip(tx *types.Transaction) error {
 		tx.SetL1BlockNumber(bn)
 	} else if l1BlockNumber.Uint64() > bn {
 		s.SetLatestL1BlockNumber(l1BlockNumber.Uint64())
-	} else if l1BlockNumber.Uint64() < bn {
-		// l1BlockNumber < latest l1BlockNumber
-		// indicates an error
-		log.Error("Blocknumber monotonicity violation", "hash", tx.Hash().Hex(),
-			"new", l1BlockNumber.Uint64(), "old", bn)
-	}
-
-	// Store the latest timestamp value
-	if tx.L1Timestamp() > ts {
-		s.SetLatestL1Timestamp(tx.L1Timestamp())
 	}
 
 	index := s.GetLatestIndex()
@@ -878,6 +867,42 @@ func (s *SyncService) applyTransactionToTip(tx *types.Transaction) error {
 		} else {
 			tx.SetIndex(*index + 1)
 		}
+	}
+
+	monorailHfActive := index != nil && *index > s.monorailHfBlock
+
+	// Enforce timestamp bounds
+	if tx.L1Timestamp() < ts {
+		log.Error("Timestamp monotonicity violation", "hash", tx.Hash().Hex(), "latest", ts, "tx", tx.L1Timestamp())
+		if monorailHfActive {
+			tx.SetL1Timestamp(ts)
+		}
+	} else if tx.L1Timestamp() > uint64(time.Now().Unix())+86400 {
+		log.Error("Timestamp too far in the future", "hash", tx.Hash().Hex(), "latest", ts, "tx", tx.L1Timestamp())
+		if monorailHfActive {
+			tx.SetL1Timestamp(ts)
+		}
+	}
+
+	// Enforce block number bounds
+	if l1BlockNumber.Uint64() < bn {
+		log.Error("Blocknumber monotonicity violation", "hash", tx.Hash().Hex(),
+			"new", l1BlockNumber.Uint64(), "old", bn)
+		if monorailHfActive {
+			tx.SetL1BlockNumber(bn)
+		}
+	} else if l1BlockNumber.Uint64() > bn+2100000 {
+		// 2100000 is ~1 year worth of L1 blocks on mainnet and goerli
+		log.Error("Blocknumber too far in the future", "hash", tx.Hash().Hex(),
+			"new", l1BlockNumber.Uint64(), "old", bn)
+		if monorailHfActive {
+			tx.SetL1BlockNumber(bn)
+		}
+	}
+
+	// Store the latest timestamp value
+	if tx.L1Timestamp() > ts {
+		s.SetLatestL1Timestamp(tx.L1Timestamp())
 	}
 
 	// On restart, these values are repaired to handle

@@ -165,6 +165,7 @@ var (
 		utils.RollupFeeThresholdUpFlag,
 		utils.RollupGenesisTimeoutSecondsFlag,
 		utils.SequencerClientHttpFlag,
+		utils.MonorailHfBlockFlag,
 	}
 
 	rpcFlags = []cli.Flag{

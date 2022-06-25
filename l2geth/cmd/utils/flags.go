@@ -872,6 +872,11 @@ var (
 		Usage:  "HTTP endpoint for the sequencer client",
 		EnvVar: "SEQUENCER_CLIENT_HTTP",
 	}
+	MonorailHfBlockFlag = cli.StringFlag{
+		Name:   "rollup.monorailhfblock",
+		Usage:  "Block at which to activate the Monorail HF",
+		EnvVar: "MONORAIL_HF_BLOCK",
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1150,6 +1155,9 @@ func setRollup(ctx *cli.Context, cfg *rollup.Config) {
 	}
 	if ctx.GlobalIsSet(SequencerClientHttpFlag.Name) {
 		cfg.SequencerClientHttp = ctx.GlobalString(SequencerClientHttpFlag.Name)
+	}
+	if ctx.GlobalIsSet(MonorailHfBlockFlag.Name) {
+		cfg.MonorailHfBlock = ctx.GlobalUint64(MonorailHfBlockFlag.Name)
 	}
 }
 
