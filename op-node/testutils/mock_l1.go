@@ -13,6 +13,11 @@ type MockL1Source struct {
 	mock.Mock
 }
 
+func (m *MockL1Source) L1HeadBlockRef(ctx context.Context) (eth.L1BlockRef, error) {
+	out := m.Mock.MethodCalled("L1HeadBlockRef")
+	return out[0].(eth.L1BlockRef), *out[1].(*error)
+}
+
 func (m *MockL1Source) L1BlockRefByNumber(ctx context.Context, u uint64) (eth.L1BlockRef, error) {
 	out := m.Mock.MethodCalled("L1BlockRefByNumber", u)
 	return out[0].(eth.L1BlockRef), *out[1].(*error)
