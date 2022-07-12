@@ -9,7 +9,6 @@ import '@nomiclabs/hardhat-ethers'
 import '@nomiclabs/hardhat-waffle'
 import '@nomiclabs/hardhat-etherscan'
 import '@primitivefi/hardhat-dodoc'
-import '@typechain/hardhat'
 import 'hardhat-deploy'
 import 'hardhat-gas-reporter'
 import 'hardhat-output-validator'
@@ -94,10 +93,6 @@ const config: HardhatUserConfig & any = {
         },
       },
     },
-  },
-  typechain: {
-    outDir: 'dist/types',
-    target: 'ethers-v5',
   },
   paths: {
     deploy: './deploy',

@@ -34,9 +34,9 @@ export interface ChugSplashConfig {
  * the config can be published or off-chain tooling won't be able to re-generate the deployment.
  */
 export interface CanonicalChugSplashConfig extends ChugSplashConfig {
-  sources: Array<{
-    language: 'solidity' // TODO: vyper support eventually
-    version: string
+  inputs: Array<{
+    solcVersion: string
+    solcLongVersion: string
     input: any[] // TODO: Properly type this
   }>
 }

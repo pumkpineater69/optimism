@@ -44,7 +44,7 @@ contract ChugSplashRegistry {
         // ChugSplashManager contract based on the project's name.
         bytes32 salt = keccak256(bytes(_name));
         registry[_name] = new ChugSplashManager{ salt: salt }(_owner);
-        emit ChugSplashProjectRegistered(_name, msg.sender, _owner);
+        emit ChugSplashProjectRegistered(_name, msg.sender, _owner, address(registry[_name]));
         return address(registry[_name]);
     }
 }

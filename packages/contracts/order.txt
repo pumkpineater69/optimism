@@ -1,0 +1,8 @@
+1. npx hardhat chugsplash-bundle
+2. npx hardhat chugsplash-commit
+3. npx hardhat chugsplash-verify
+4. propose bundle + IPFS hash
+5. approve bundle
+6. bot executes bundle
+7. task to view bundle progress
+

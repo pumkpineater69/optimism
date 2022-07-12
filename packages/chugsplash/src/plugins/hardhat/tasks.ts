@@ -1,5 +1,5 @@
-import path from 'path'
-import fs from 'fs'
+import * as path from 'path'
+import * as fs from 'fs'
 
 import { subtask, task, types } from 'hardhat/config'
 import { SolcBuild } from 'hardhat/types'
@@ -37,10 +37,12 @@ subtask(TASK_CHUGSPLASH_LOAD)
   .setAction(
     async (args: { deployConfig: string }, hre): Promise<ChugSplashConfig> => {
       // Make sure we have the latest compiled code.
-      await hre.run(TASK_COMPILE)
+      await hre.run(TASK_COMPILE, {
+        quiet: true,
+      })
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const config = require(path.resolve(args.deployConfig))
-      config.default || config
+      let config = require(path.resolve(args.deployConfig))
+      config = config.default || config
       validateChugSplashConfig(config)
       return config
     }
@@ -60,7 +62,7 @@ subtask(TASK_CHUGSPLASH_BUNDLE_LOCAL)
       const artifacts = {}
       for (const contract of Object.values(config.contracts)) {
         const artifact = await getContractArtifact(contract.source)
-        const storageLayout = await getStorageLayout(artifact)
+        const storageLayout = await getStorageLayout(contract.source)
         artifacts[contract.source] = {
           bytecode: artifact.bytecode,
           storageLayout,
@@ -79,16 +81,12 @@ subtask(TASK_CHUGSPLASH_BUNDLE_REMOTE)
       hre
     ): Promise<ChugSplashActionBundle> => {
       const artifacts = {}
-      for (const source of args.deployConfig.sources) {
-        if (source.language !== 'solidity') {
-          throw new Error('languages other than Solidity not yet supported')
-        }
-
+      for (const source of args.deployConfig.inputs) {
         const solcBuild: SolcBuild = await hre.run(
           TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD,
           {
             quiet: true,
-            solcVersion: source.version,
+            solcVersion: source.solcVersion,
           }
         )
 
@@ -205,7 +203,12 @@ task(TASK_CHUGSPLASH_COMMIT)
         inputs,
       })
 
+      const bundle = await hre.run(TASK_CHUGSPLASH_BUNDLE_LOCAL, {
+        deployConfig: args.deployConfig,
+      })
+
       console.log(configPublishResult['IpfsHash'])
+      console.log(bundle.root)
     }
   )
 

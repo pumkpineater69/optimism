@@ -10,7 +10,6 @@
   "scripts": {
     "build": "yarn build:contracts && yarn build:typescript",
     "build:contracts": "npx hardhat compile",
-    "build:typechain": "npx hardhat typechain",
     "build:typescript": "tsc -p tsconfig.build.json",
     "test": "npx hardhat test",
     "lint:ts:check": "eslint .",
@@ -52,8 +51,6 @@
     "@nomiclabs/hardhat-waffle": "^2.0.1",
     "@openzeppelin/contracts": "4.3.2",
     "@rari-capital/solmate": "https://github.com/rari-capital/solmate.git#8f9b23f8838670afda0fd8983f2c41e8037ae6bc",
-    "@typechain/ethers-v5": "^8.0.2",
-    "@typechain/hardhat": "^3.0.0",
     "@types/chai": "^4.2.18",
     "@types/chai-as-promised": "^7.1.4",
     "@types/mocha": "^8.2.2",
@@ -76,8 +73,7 @@
     "prettier": "^2.3.1",
     "prettier-plugin-solidity": "^1.0.0-beta.18",
     "solhint": "^3.3.6",
-    "solhint-plugin-prettier": "^0.0.5",
-    "typechain": "^6.0.4"
+    "solhint-plugin-prettier": "^0.0.5"
   },
   "peerDependencies": {
     "@nomiclabs/hardhat-ethers": "^2",
