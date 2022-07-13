@@ -93,7 +93,7 @@ func (bq *BatchQueue) ResetStep(ctx context.Context, l1Fetcher L1Fetcher) error 
 
 	bq.batchesByTimestamp = make(map[uint64][]*BatchWithL1InclusionBlock)
 	bq.l1Blocks = bq.l1Blocks[:0]
-	bq.l1Blocks = append(bq.l1Blocks, bq.progress.Origin)
+	// bq.l1Blocks = append(bq.l1Blocks, bq.progress.Origin)
 
 	return io.EOF
 }
