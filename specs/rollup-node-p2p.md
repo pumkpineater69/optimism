@@ -29,35 +29,34 @@ and are adopted by several other blockchains, most notably the [L1 consensus lay
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**
 
-- [Rollup-node P2P interface](#rollup-node-p2p-interface)
-  - [P2P configuration](#p2p-configuration)
-    - [Identification](#identification)
-    - [Discv5](#discv5)
-      - [Structure](#structure)
-    - [LibP2P](#libp2p)
-      - [Transport](#transport)
-      - [Dialing](#dialing)
-      - [NAT](#nat)
-      - [Peer management](#peer-management)
-      - [Transport security](#transport-security)
-      - [Protocol negotiation](#protocol-negotiation)
-      - [Identify](#identify)
-      - [Ping](#ping)
-      - [Multiplexing](#multiplexing)
-      - [GossipSub](#gossipsub)
-        - [Content-based message identification](#content-based-message-identification)
-        - [Message compression and limits](#message-compression-and-limits)
-        - [Message ID computation](#message-id-computation)
-      - [Heartbeat and parameters](#heartbeat-and-parameters)
-      - [Topic configuration](#topic-configuration)
-      - [Topic validation](#topic-validation)
-  - [Gossip Topics](#gossip-topics)
-    - [`blocks`](#blocks)
-      - [Block encoding](#block-encoding)
-      - [Block signatures](#block-signatures)
-      - [Block validation](#block-validation)
-        - [Block processing](#block-processing)
-        - [Block topic scoring parameters](#block-topic-scoring-parameters)
+- [P2P configuration](#p2p-configuration)
+  - [Identification](#identification)
+  - [Discv5](#discv5)
+    - [Structure](#structure)
+  - [LibP2P](#libp2p)
+    - [Transport](#transport)
+    - [Dialing](#dialing)
+    - [NAT](#nat)
+    - [Peer management](#peer-management)
+    - [Transport security](#transport-security)
+    - [Protocol negotiation](#protocol-negotiation)
+    - [Identify](#identify)
+    - [Ping](#ping)
+    - [Multiplexing](#multiplexing)
+    - [GossipSub](#gossipsub)
+      - [Content-based message identification](#content-based-message-identification)
+      - [Message compression and limits](#message-compression-and-limits)
+      - [Message ID computation](#message-id-computation)
+    - [Heartbeat and parameters](#heartbeat-and-parameters)
+    - [Topic configuration](#topic-configuration)
+    - [Topic validation](#topic-validation)
+- [Gossip Topics](#gossip-topics)
+  - [`blocks`](#blocks)
+    - [Block encoding](#block-encoding)
+    - [Block signatures](#block-signatures)
+    - [Block validation](#block-validation)
+      - [Block processing](#block-processing)
+      - [Block topic scoring parameters](#block-topic-scoring-parameters)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -172,7 +171,7 @@ For async communication over different channels over the same connection, multip
 
 #### GossipSub
 
-[GossipSub 1.1](gossipsub) (`/meshsub/1.1.0`, i.e. with peer-scoring extension) is a pubsub protocol for mesh-networks,
+[GossipSub 1.1][gossipsub] (`/meshsub/1.1.0`, i.e. with peer-scoring extension) is a pubsub protocol for mesh-networks,
 deployed on L1 consensus (Eth2) and other protocols such as Filecoin, offering lots of customization options.
 
 ##### Content-based message identification

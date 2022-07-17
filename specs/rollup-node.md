@@ -44,7 +44,6 @@ currently only concerned with the specification of the rollup driver.
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**
 
-- [Rollup Node Specification](#rollup-node-specification)
 - [L2 Chain Derivation](#l2-chain-derivation)
   - [From L1 Sequencing Window to L2 Payload Attributes](#from-l1-sequencing-window-to-l2-payload-attributes)
     - [Reading L1 inputs](#reading-l1-inputs)

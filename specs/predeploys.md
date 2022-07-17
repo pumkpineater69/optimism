@@ -4,21 +4,20 @@
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**
 
-- [Predeploys](#predeploys)
-  - [Overview](#overview)
-  - [OVM\_L2ToL1MessagePasser](#ovm_l2tol1messagepasser)
-  - [OVM\_DeployerWhitelist](#ovm_deployerwhitelist)
-  - [OVM\_ETH](#ovm_eth)
-  - [WETH9](#weth9)
-  - [L2CrossDomainMessenger](#l2crossdomainmessenger)
-  - [L2StandardBridge](#l2standardbridge)
-  - [SequencerFeeVault](#sequencerfeevault)
-  - [OptimismMintableERC20Factory](#OptimismMintableERC20Factory)
-  - [L1BlockNumber](#l1blocknumber)
-  - [OVM\_GasPriceOracle](#ovm_gaspriceoracle)
-  - [Reserved System Address 1](#reserved-system-address-1)
-  - [Reserved System Address 2](#reserved-system-address-2)
-  - [L1Block](#l1block)
+- [Overview](#overview)
+- [OVM\_L2ToL1MessagePasser](#ovm%5C_l2tol1messagepasser)
+- [OVM\_DeployerWhitelist](#ovm%5C_deployerwhitelist)
+- [OVM\_ETH](#ovm%5C_eth)
+- [WETH9](#weth9)
+- [L2CrossDomainMessenger](#l2crossdomainmessenger)
+- [L2StandardBridge](#l2standardbridge)
+- [SequencerFeeVault](#sequencerfeevault)
+- [OptimismMintableERC20Factory](#optimismmintableerc20factory)
+- [L1BlockNumber](#l1blocknumber)
+- [OVM\_GasPriceOracle](#ovm%5C_gaspriceoracle)
+- [Reserved System Address 1](#reserved-system-address-1)
+- [Reserved System Address 2](#reserved-system-address-2)
+- [L1Block](#l1block)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -334,9 +333,9 @@ Reserved for future use.
 
 ## L1Block
 
-[l1-block-predeploy]: glossary.md#l1-block-predeployed-contract
+[l1-block-predeploy]: glossary.md#l1-attributes-predeployed-contract
 
-The [L1Block](l1-block-predeploy) was introduced in Bedrock and is responsible for
+The [L1Block][l1-block-predeploy] was introduced in Bedrock and is responsible for
 maintaining L1 context in L2. This allows for L1 state to be accessed in L2.
 
 ```solidity
@@ -371,10 +370,11 @@ interface L1Block {
      * @dev sets the latest L1 block attributes
      */
     function setL1BlockValues(
-        uint256 _number,
-        uint256 _timestamp,
+        uint64 _number,
+        uint64 _timestamp,
         uint256 _basefee,
-        bytes32 _hash
+        bytes32 _hash,
+        uint64 _sequenceNumber
     ) external;
 }
 ```
