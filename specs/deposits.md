@@ -280,4 +280,3 @@ it possible for users to interact with contracts on L2 even when the Sequencer i
 A reference implementation of the deposit contract can be found in [OptimismPortal.sol].
 
 [OptimismPortal.sol]: ../packages/contracts-bedrock/contracts/L1/OptimismPortal.sol
-
