@@ -17,6 +17,7 @@ export enum L1ChainID {
   GOERLI = 5,
   KOVAN = 42,
   HARDHAT_LOCAL = 31337,
+  BEDROCK_LOCAL_DEVNET = 900,
 }
 
 /**
@@ -28,6 +29,7 @@ export enum L2ChainID {
   OPTIMISM_KOVAN = 69,
   OPTIMISM_HARDHAT_LOCAL = 31337,
   OPTIMISM_HARDHAT_DEVNET = 17,
+  OPTIMISM_BEDROCK_LOCAL_DEVNET = 901,
 }
 
 /**
@@ -40,6 +42,9 @@ export interface OEL1Contracts {
   StateCommitmentChain: Contract
   CanonicalTransactionChain: Contract
   BondManager: Contract
+  // Bedrock
+  OptimismPortal: Contract
+  L2OutputOracle: Contract
 }
 
 /**
@@ -174,7 +179,9 @@ export interface CoreCrossChainMessage {
   sender: string
   target: string
   message: string
-  messageNonce: number
+  messageNonce: BigNumber
+  value: BigNumber
+  minGasLimit: BigNumber
 }
 
 /**
@@ -183,7 +190,6 @@ export interface CoreCrossChainMessage {
  */
 export interface CrossChainMessage extends CoreCrossChainMessage {
   direction: MessageDirection
-  gasLimit: number
   logIndex: number
   blockNumber: number
   transactionHash: string
@@ -263,6 +269,37 @@ export interface CrossChainMessageProof {
   }
   stateTrieWitness: string
   storageTrieWitness: string
+}
+
+/**
+ * Bedrock output oracle data.
+ */
+export interface BedrockOutputData {
+  outputRoot: string
+  l1Timestamp: number
+  l2BlockNumber: number
+}
+
+/**
+ * Bedrock proof data required to finalize an L2 to L1 message.
+ */
+export interface BedrockCrossChainMessageProof {
+  outputRootProof: {
+    version: string
+    stateRoot: string
+    withdrawerStorageRoot: string
+    latestBlockhash: string
+  }
+  withdrawalProof: string
+}
+
+/**
+ * Parameters that govern the L2OutputOracle.
+ */
+export type L2OutputOracleParameters = {
+  submissionInterval: number
+  startingBlockNumber: number
+  l2BlockTime: number
 }
 
 /**

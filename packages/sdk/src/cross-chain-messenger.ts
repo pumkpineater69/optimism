@@ -8,8 +8,17 @@ import {
 } from '@ethersproject/abstract-provider'
 import { Signer } from '@ethersproject/abstract-signer'
 import { ethers, BigNumber, Overrides, CallOverrides } from 'ethers'
-import { sleep, remove0x } from '@eth-optimism/core-utils'
-import { predeploys } from '@eth-optimism/contracts'
+import {
+  sleep,
+  remove0x,
+  toHexString,
+  toRpcHexString,
+  hashWithdrawal,
+  encodeCrossDomainMessageV0,
+  hashCrossDomainMessage,
+} from '@eth-optimism/core-utils'
+import { getContractInterface, predeploys } from '@eth-optimism/contracts'
+import * as rlp from 'rlp'
 
 import {
   ICrossChainMessenger,
@@ -34,6 +43,9 @@ import {
   StateRoot,
   StateRootBatch,
   IBridgeAdapter,
+  L2OutputOracleParameters,
+  BedrockOutputData,
+  BedrockCrossChainMessageProof,
 } from './interfaces'
 import {
   toSignerOrProvider,
@@ -42,10 +54,8 @@ import {
   DeepPartial,
   getAllOEContracts,
   getBridgeAdapters,
-  hashCrossChainMessage,
   makeMerkleTreeProof,
   makeStateTrieProof,
-  encodeCrossChainMessage,
   DEPOSIT_CONFIRMATION_BLOCKS,
   CHAIN_BLOCK_TIMES,
 } from './utils'
@@ -59,6 +69,9 @@ export class CrossChainMessenger implements ICrossChainMessenger {
   public bridges: BridgeAdapters
   public depositConfirmationBlocks: number
   public l1BlockTimeSeconds: number
+  public bedrock: boolean
+
+  private _l2OutputOracleParameters: L2OutputOracleParameters
 
   /**
    * Creates a new CrossChainProvider instance.
@@ -72,6 +85,7 @@ export class CrossChainMessenger implements ICrossChainMessenger {
    * @param opts.l1BlockTimeSeconds Optional estimated block time in seconds for the L1 chain.
    * @param opts.contracts Optional contract address overrides.
    * @param opts.bridges Optional bridge address list.
+   * @param opts.bedrock Whether or not to enable Bedrock compatibility.
    */
   constructor(opts: {
     l1SignerOrProvider: SignerOrProviderLike
@@ -82,7 +96,9 @@ export class CrossChainMessenger implements ICrossChainMessenger {
     l1BlockTimeSeconds?: NumberLike
     contracts?: DeepPartial<OEContractsLike>
     bridges?: BridgeAdapterData
+    bedrock?: boolean
   }) {
+    this.bedrock = opts.bedrock ?? false
     this.l1SignerOrProvider = toSignerOrProvider(opts.l1SignerOrProvider)
     this.l2SignerOrProvider = toSignerOrProvider(opts.l2SignerOrProvider)
 
@@ -151,6 +167,26 @@ export class CrossChainMessenger implements ICrossChainMessenger {
     }
   }
 
+  public async getL2OutputOracleParameters(): Promise<L2OutputOracleParameters> {
+    if (this._l2OutputOracleParameters) {
+      return this._l2OutputOracleParameters
+    }
+
+    this._l2OutputOracleParameters = {
+      submissionInterval: (
+        await this.contracts.l1.L2OutputOracle.SUBMISSION_INTERVAL()
+      ).toNumber(),
+      startingBlockNumber: (
+        await this.contracts.l1.L2OutputOracle.STARTING_BLOCK_NUMBER()
+      ).toNumber(),
+      l2BlockTime: (
+        await this.contracts.l1.L2OutputOracle.L2_BLOCK_TIME()
+      ).toNumber(),
+    }
+
+    return this._l2OutputOracleParameters
+  }
+
   public async getMessagesByTransaction(
     transaction: TransactionLike,
     opts: {
@@ -203,6 +239,19 @@ export class CrossChainMessenger implements ICrossChainMessenger {
         return parsed.name === 'SentMessage'
       })
       .map((log) => {
+        // Try to pull out the value field, but only if the very next log is a SentMessageExtraData
+        // event which was introduced in the Bedrock upgrade.
+        let value = ethers.BigNumber.from(0)
+        if (receipt.logs.length > log.logIndex + 1) {
+          const next = receipt.logs[log.logIndex + 1]
+          if (next.address === messenger.address) {
+            const nextParsed = messenger.interface.parseLog(next)
+            if (nextParsed.name === 'SentMessageExtension1') {
+              value = nextParsed.args.value
+            }
+          }
+        }
+
         // Convert each SentMessage log into a message object
         const parsed = messenger.interface.parseLog(log)
         return {
@@ -211,7 +260,8 @@ export class CrossChainMessenger implements ICrossChainMessenger {
           sender: parsed.args.sender,
           message: parsed.args.message,
           messageNonce: parsed.args.messageNonce,
-          gasLimit: parsed.args.gasLimit,
+          value,
+          minGasLimit: parsed.args.gasLimit,
           logIndex: log.logIndex,
           blockNumber: log.blockNumber,
           transactionHash: log.transactionHash,
@@ -373,20 +423,31 @@ export class CrossChainMessenger implements ICrossChainMessenger {
       }
     } else {
       if (receipt === null) {
-        const stateRoot = await this.getMessageStateRoot(resolved)
-        if (stateRoot === null) {
-          return MessageStatus.STATE_ROOT_NOT_PUBLISHED
-        } else {
-          const challengePeriod = await this.getChallengePeriodSeconds()
-          const targetBlock = await this.l1Provider.getBlock(
-            stateRoot.batch.blockNumber
-          )
-          const latestBlock = await this.l1Provider.getBlock('latest')
-          if (targetBlock.timestamp + challengePeriod > latestBlock.timestamp) {
-            return MessageStatus.IN_CHALLENGE_PERIOD
-          } else {
-            return MessageStatus.READY_FOR_RELAY
+        let timestamp: number
+        if (this.bedrock) {
+          const output = await this.getMessageBedrockOutput(resolved)
+          if (output === null) {
+            return MessageStatus.STATE_ROOT_NOT_PUBLISHED
           }
+
+          timestamp = output.l1Timestamp
+        } else {
+          const stateRoot = await this.getMessageStateRoot(resolved)
+          if (stateRoot === null) {
+            return MessageStatus.STATE_ROOT_NOT_PUBLISHED
+          }
+
+          const bn = stateRoot.batch.blockNumber
+          const block = await this.l1Provider.getBlock(bn)
+          timestamp = block.timestamp
+        }
+
+        const challengePeriod = await this.getChallengePeriodSeconds()
+        const latestBlock = await this.l1Provider.getBlock('latest')
+        if (timestamp + challengePeriod > latestBlock.timestamp) {
+          return MessageStatus.IN_CHALLENGE_PERIOD
+        } else {
+          return MessageStatus.READY_FOR_RELAY
         }
       } else {
         if (receipt.receiptStatus === MessageReceiptStatus.RELAYED_SUCCEEDED) {
@@ -402,7 +463,14 @@ export class CrossChainMessenger implements ICrossChainMessenger {
     message: MessageLike
   ): Promise<MessageReceipt> {
     const resolved = await this.toCrossChainMessage(message)
-    const messageHash = hashCrossChainMessage(resolved)
+    const messageHash = hashCrossDomainMessage(
+      resolved.messageNonce,
+      resolved.sender,
+      resolved.target,
+      resolved.value,
+      resolved.minGasLimit,
+      resolved.message
+    )
 
     // Here we want the messenger that will receive the message, not the one that sent it.
     const messenger =
@@ -642,9 +710,51 @@ export class CrossChainMessenger implements ICrossChainMessenger {
   }
 
   public async getChallengePeriodSeconds(): Promise<number> {
-    const challengePeriod =
-      await this.contracts.l1.StateCommitmentChain.FRAUD_PROOF_WINDOW()
+    const challengePeriod = this.bedrock
+      ? await this.contracts.l1.OptimismPortal.FINALIZATION_PERIOD_SECONDS()
+      : await this.contracts.l1.StateCommitmentChain.FRAUD_PROOF_WINDOW()
     return challengePeriod.toNumber()
+  }
+
+  public async getMessageBedrockOutput(
+    message: MessageLike
+  ): Promise<BedrockOutputData | null> {
+    const resolved = await this.toCrossChainMessage(message)
+
+    // Outputs are only a thing for L2 to L1 messages.
+    if (resolved.direction === MessageDirection.L1_TO_L2) {
+      throw new Error(`cannot get a state root for an L1 to L2 message`)
+    }
+
+    const l2OutputOracleParameters = await this.getL2OutputOracleParameters()
+
+    // TODO: Handle old messages from before Bedrock upgrade.
+    const events = await this.contracts.l1.L2OutputOracle.queryFilter(
+      this.contracts.l1.L2OutputOracle.filters.L2OutputAppended(
+        undefined,
+        undefined,
+        Math.ceil(
+          (resolved.blockNumber -
+            l2OutputOracleParameters.startingBlockNumber) /
+            l2OutputOracleParameters.submissionInterval
+        ) * l2OutputOracleParameters.submissionInterval
+      )
+    )
+
+    if (events.length === 0) {
+      return null
+    }
+
+    // Should not happen
+    if (events.length > 1) {
+      throw new Error(`multiple output roots found for message`)
+    }
+
+    return {
+      outputRoot: events[0].args._l2Output,
+      l1Timestamp: events[0].args._l1Timestamp.toNumber(),
+      l2BlockNumber: events[0].args._l2BlockNumber.toNumber(),
+    }
   }
 
   public async getMessageStateRoot(
@@ -826,8 +936,12 @@ export class CrossChainMessenger implements ICrossChainMessenger {
     // https://docs.soliditylang.org/en/v0.8.4/internals/layout_in_storage.html#mappings-and-dynamic-arrays
     const messageSlot = ethers.utils.keccak256(
       ethers.utils.keccak256(
-        encodeCrossChainMessage(resolved) +
-          remove0x(this.contracts.l2.L2CrossDomainMessenger.address)
+        encodeCrossDomainMessageV0(
+          resolved.target,
+          resolved.sender,
+          resolved.message,
+          resolved.messageNonce
+        ) + remove0x(this.contracts.l2.L2CrossDomainMessenger.address)
       ) + '00'.repeat(32)
     )
 
@@ -848,8 +962,61 @@ export class CrossChainMessenger implements ICrossChainMessenger {
           stateRoot.stateRootIndexInBatch
         ),
       },
-      stateTrieWitness: stateTrieProof.accountProof,
-      storageTrieWitness: stateTrieProof.storageProof,
+      stateTrieWitness: toHexString(rlp.encode(stateTrieProof.accountProof)),
+      storageTrieWitness: toHexString(rlp.encode(stateTrieProof.storageProof)),
+    }
+  }
+
+  public async getBedrockMessageProof(
+    message: MessageLike
+  ): Promise<BedrockCrossChainMessageProof> {
+    const resolved = await this.toCrossChainMessage(message)
+    if (resolved.direction === MessageDirection.L1_TO_L2) {
+      throw new Error(`can only generate proofs for L2 to L1 messages`)
+    }
+
+    const output = await this.getMessageBedrockOutput(resolved)
+    if (output === null) {
+      throw new Error(`state root for message not yet published`)
+    }
+
+    const messageSlot = ethers.utils.keccak256(
+      ethers.utils.hexConcat([
+        hashWithdrawal(
+          resolved.messageNonce,
+          resolved.sender,
+          resolved.target,
+          resolved.value,
+          resolved.minGasLimit,
+          resolved.message
+        ),
+        ethers.constants.HashZero,
+      ])
+    )
+
+    const stateTrieProof = await makeStateTrieProof(
+      this.l2Provider as ethers.providers.JsonRpcProvider,
+      resolved.blockNumber,
+      this.contracts.l2.OVM_L2ToL1MessagePasser.address,
+      messageSlot
+    )
+
+    const block = await (
+      this.l2Provider as ethers.providers.JsonRpcProvider
+    ).send('eth_getBlockByNumber', [
+      toRpcHexString(resolved.blockNumber),
+      'false',
+    ])
+
+    return {
+      outputRootProof: {
+        // TODO: Get correct version here
+        version: ethers.constants.HashZero,
+        stateRoot: block.stateRoot,
+        withdrawerStorageRoot: stateTrieProof.storageProof[0],
+        latestBlockhash: block.hash,
+      },
+      withdrawalProof: toHexString(rlp.encode(stateTrieProof.storageProof)),
     }
   }
 
@@ -1033,15 +1200,30 @@ export class CrossChainMessenger implements ICrossChainMessenger {
         throw new Error(`cannot resend L2 to L1 message`)
       }
 
-      return this.contracts.l1.L1CrossDomainMessenger.populateTransaction.replayMessage(
-        resolved.target,
-        resolved.sender,
-        resolved.message,
-        resolved.messageNonce,
-        resolved.gasLimit,
-        messageGasLimit,
-        opts?.overrides || {}
-      )
+      if (this.bedrock) {
+        return this.populateTransaction.finalizeMessage(resolved, {
+          ...(opts || {}),
+          overrides: {
+            ...opts?.overrides,
+            gasLimit: messageGasLimit,
+          },
+        })
+      } else {
+        const legacyL1XDM = new ethers.Contract(
+          this.contracts.l1.L1CrossDomainMessenger.address,
+          getContractInterface('L1CrossDomainMessenger'),
+          this.l1SignerOrProvider
+        )
+        return legacyL1XDM.populateTransaction.replayMessage(
+          resolved.target,
+          resolved.sender,
+          resolved.message,
+          resolved.messageNonce,
+          resolved.minGasLimit,
+          messageGasLimit,
+          opts?.overrides || {}
+        )
+      }
     },
 
     finalizeMessage: async (
@@ -1055,15 +1237,38 @@ export class CrossChainMessenger implements ICrossChainMessenger {
         throw new Error(`cannot finalize L1 to L2 message`)
       }
 
-      const proof = await this.getMessageProof(resolved)
-      return this.contracts.l1.L1CrossDomainMessenger.populateTransaction.relayMessage(
-        resolved.target,
-        resolved.sender,
-        resolved.message,
-        resolved.messageNonce,
-        proof,
-        opts?.overrides || {}
-      )
+      if (this.bedrock) {
+        const proof = await this.getBedrockMessageProof(resolved)
+        return this.contracts.l1.OptimismPortal.populateTransaction.finalizeWithdrawalTransaction(
+          resolved.messageNonce,
+          resolved.sender,
+          resolved.target,
+          resolved.value,
+          resolved.minGasLimit,
+          resolved.message,
+          resolved.blockNumber,
+          proof.outputRootProof,
+          proof.withdrawalProof
+        )
+      } else {
+        // L1CrossDomainMessenger relayMessage is the only method that isn't fully backwards
+        // compatible, so we need to use the legacy interface. When we fully upgrade to Bedrock we
+        // should be able to remove this code.
+        const proof = await this.getMessageProof(resolved)
+        const legacyL1XDM = new ethers.Contract(
+          this.contracts.l1.L1CrossDomainMessenger.address,
+          getContractInterface('L1CrossDomainMessenger'),
+          this.l1SignerOrProvider
+        )
+        return legacyL1XDM.populateTransaction.relayMessage(
+          resolved.target,
+          resolved.sender,
+          resolved.message,
+          resolved.messageNonce,
+          proof,
+          opts?.overrides || {}
+        )
+      }
     },
 
     depositETH: async (
