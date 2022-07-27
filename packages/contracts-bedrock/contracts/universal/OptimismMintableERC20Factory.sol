@@ -32,13 +32,13 @@ contract OptimismMintableERC20Factory {
     /**
      * @notice Emitted whenever a new OptimismMintableERC20 is created.
      *
-     * @param localToken  Address of the created token on the local chain.
      * @param remoteToken Address of the corresponding token on the remote chain.
+     * @param localToken  Address of the created token on the local chain.
      * @param deployer    Address of the account that deployed the token.
      */
     event OptimismMintableERC20Created(
-        address indexed localToken,
         address indexed remoteToken,
+        address indexed localToken,
         address deployer
     );
 
