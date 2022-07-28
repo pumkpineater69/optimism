@@ -115,18 +115,18 @@ func (co *ChannelOut) Close() error {
 func (co *ChannelOut) OutputFrame(w *bytes.Buffer, maxSize uint64) error {
 	f := Frame{
 		ID:          co.id,
-		FrameNumber: co.frame,
+		FrameNumber: uint16(co.frame),
 	}
 
 	// Copy data from the local buffer into the frame data buffer
-	// Don't go past the maxSize even with the max possible uvarints
-	// +1 for single byte of frame content, +1 for lastFrame bool
-	// +24 for maximum uvarints
-	// +32 for the data ID
-	maxDataSize := maxSize - 32 - 24 - 1 - 1
-	if maxDataSize >= uint64(co.buf.Len()) {
+	// Don't go past the maxSize with the fixed frame overhead.
+	// Fixed overhead: 32 + 8 + 2 + 4 + 1  = 47 bytes.
+	// Add one extra byte for the version byte (for the entire L1 tx though)
+	maxDataSize := maxSize - 47 - 1
+	if maxDataSize > uint64(co.buf.Len()) {
 		maxDataSize = uint64(co.buf.Len())
-		// If we are closed & will not spill past the current frame, end it.
+		// If we are closed & will not spill past the current frame
+		// mark it is the final frame of the channel.
 		if co.closed {
 			f.IsLast = true
 		}
@@ -137,7 +137,7 @@ func (co *ChannelOut) OutputFrame(w *bytes.Buffer, maxSize uint64) error {
 		return err
 	}
 
-	if _, err := f.MarshalBinary(w); err != nil {
+	if err := f.MarshalBinary(w); err != nil {
 		return err
 	}
 
