@@ -47,9 +47,9 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		l1Info := testutils.RandomL1Info(rng)
 		l1Info.InfoNum = l2Parent.L1Origin.Number
 		epoch := l1Info.ID()
-		_, crit, err := PreparePayloadAttributes(context.Background(), cfg, l1Fetcher, l2Parent, epoch)
+		_, err := PreparePayloadAttributes(context.Background(), cfg, l1Fetcher, l2Parent, epoch)
 		require.NotNil(t, err, "inconsistent L1 origin error expected")
-		require.True(t, crit, "inconsistent L1 origin transition must be handled like a critical error with reorg")
+		require.NotErrorIs(t, err, ErrCritical, "inconsistent L1 origin transition must be handled like a critical error with reorg")
 	})
 	t.Run("rpc fail Fetch", func(t *testing.T) {
 		rng := rand.New(rand.NewSource(1234))
@@ -74,7 +74,7 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		l1Fetcher.ExpectInfoByHash(epoch.Hash, nil, mockRPCErr)
 		_, err := PreparePayloadAttributes(context.Background(), cfg, l1Fetcher, l2Parent, epoch)
 		require.ErrorIs(t, err, mockRPCErr, "mock rpc error expected")
-		require.NotErrorIs(t, err, ErrCritical,  "rpc errors should not be critical, it is not necessary to reorg")
+		require.NotErrorIs(t, err, ErrCritical, "rpc errors should not be critical, it is not necessary to reorg")
 	})
 	t.Run("next origin without deposits", func(t *testing.T) {
 		rng := rand.New(rand.NewSource(1234))
