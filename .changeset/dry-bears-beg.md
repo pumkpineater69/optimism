@@ -2,4 +2,4 @@
 '@eth-optimism/contracts-bedrock': patch
 ---
 
-Fixes a bug in the L2 Bedrock genesis script
+Use the same initializable across codebase

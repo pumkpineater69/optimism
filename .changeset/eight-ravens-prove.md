@@ -2,4 +2,4 @@
 '@eth-optimism/contracts-bedrock': patch
 ---
 
-Introduces Types.sol
+Fix build on latest foundry
