@@ -37,7 +37,7 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		l1Fetcher.ExpectFetch(epoch.Hash, l1Info, nil, nil, nil)
 		_, err := PreparePayloadAttributes(context.Background(), cfg, l1Fetcher, l2Parent, epoch)
 		require.NotNil(t, err, "inconsistent L1 origin error expected")
-		require.NotErrorIs(t, err, ErrCritical, "inconsistent L1 origin transition must be handled like a critical error with reorg")
+		require.ErrorIs(t, err, ErrCritical, "inconsistent L1 origin transition must be handled like a critical error with reorg")
 	})
 	t.Run("inconsistent equal height origin", func(t *testing.T) {
 		rng := rand.New(rand.NewSource(1234))
@@ -49,7 +49,7 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		epoch := l1Info.ID()
 		_, err := PreparePayloadAttributes(context.Background(), cfg, l1Fetcher, l2Parent, epoch)
 		require.NotNil(t, err, "inconsistent L1 origin error expected")
-		require.NotErrorIs(t, err, ErrCritical, "inconsistent L1 origin transition must be handled like a critical error with reorg")
+		require.ErrorIs(t, err, ErrCritical, "inconsistent L1 origin transition must be handled like a critical error with reorg")
 	})
 	t.Run("rpc fail Fetch", func(t *testing.T) {
 		rng := rand.New(rand.NewSource(1234))
