@@ -160,7 +160,6 @@ export class StandardBridgeAdapter implements IBridgeAdapter {
         getContractInterface('OptimismMintableERC20'),
         this.messenger.l2Provider
       )
-
       // Don't support ETH deposits or withdrawals via this bridge.
       if (
         hexStringEquals(toAddress(l1Token), ethers.constants.AddressZero) ||
@@ -171,6 +170,7 @@ export class StandardBridgeAdapter implements IBridgeAdapter {
 
       // Make sure the L1 token matches.
       const remoteL1Token = await contract.l1Token()
+
       if (!hexStringEquals(remoteL1Token, toAddress(l1Token))) {
         return false
       }
@@ -271,7 +271,7 @@ export class StandardBridgeAdapter implements IBridgeAdapter {
 
       const token = new Contract(
         toAddress(l1Token),
-        getContractInterface('L2StandardERC20'), // Any ERC20 will do
+        getContractInterface('OptimismMintableERC20'), // Any ERC20 will do
         this.messenger.l1Provider
       )
 

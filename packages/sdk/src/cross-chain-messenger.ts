@@ -730,7 +730,7 @@ export class CrossChainMessenger implements ICrossChainMessenger {
 
     // TODO: Handle old messages from before Bedrock upgrade.
     const events = await this.contracts.l1.L2OutputOracle.queryFilter(
-      this.contracts.l1.L2OutputOracle.filters.L2OutputAppended(
+      this.contracts.l1.L2OutputOracle.filters.OutputProposed(
         undefined,
         undefined,
         Math.ceil(
