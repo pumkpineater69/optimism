@@ -16,6 +16,9 @@ import {
   hashWithdrawal,
   encodeCrossDomainMessageV0,
   hashCrossDomainMessage,
+  L2OutputOracleParameters,
+  BedrockOutputData,
+  BedrockCrossChainMessageProof,
 } from '@eth-optimism/core-utils'
 import { getContractInterface, predeploys } from '@eth-optimism/contracts'
 import * as rlp from 'rlp'
@@ -43,9 +46,6 @@ import {
   StateRoot,
   StateRootBatch,
   IBridgeAdapter,
-  L2OutputOracleParameters,
-  BedrockOutputData,
-  BedrockCrossChainMessageProof,
 } from './interfaces'
 import {
   toSignerOrProvider,

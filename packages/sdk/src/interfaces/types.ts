@@ -272,37 +272,6 @@ export interface CrossChainMessageProof {
 }
 
 /**
- * Bedrock output oracle data.
- */
-export interface BedrockOutputData {
-  outputRoot: string
-  l1Timestamp: number
-  l2BlockNumber: number
-}
-
-/**
- * Bedrock proof data required to finalize an L2 to L1 message.
- */
-export interface BedrockCrossChainMessageProof {
-  outputRootProof: {
-    version: string
-    stateRoot: string
-    withdrawerStorageRoot: string
-    latestBlockhash: string
-  }
-  withdrawalProof: string
-}
-
-/**
- * Parameters that govern the L2OutputOracle.
- */
-export type L2OutputOracleParameters = {
-  submissionInterval: number
-  startingBlockNumber: number
-  l2BlockTime: number
-}
-
-/**
  * Stuff that can be coerced into a transaction.
  */
 export type TransactionLike = string | TransactionReceipt | TransactionResponse

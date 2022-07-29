@@ -6,6 +6,10 @@ import {
   TransactionResponse,
 } from '@ethersproject/abstract-provider'
 import { Signer } from '@ethersproject/abstract-signer'
+import {
+  BedrockCrossChainMessageProof,
+  BedrockOutputData,
+} from '@eth-optimism/core-utils'
 
 import {
   MessageLike,
@@ -24,8 +28,6 @@ import {
   StateRoot,
   StateRootBatch,
   BridgeAdapters,
-  BedrockCrossChainMessageProof,
-  BedrockOutputData,
 } from './types'
 import { IBridgeAdapter } from './bridge-adapter'
 
