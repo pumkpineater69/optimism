@@ -38,7 +38,7 @@
   },
   "private": true,
   "scripts": {
-    "preinstall": "./test.sh",
+    "postinstall": "./test.sh",
     "clean": "yarn lerna run clean --parallel",
     "build": "yarn lerna run build",
     "test": "yarn lerna run test --parallel",
