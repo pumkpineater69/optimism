@@ -6,6 +6,7 @@ import {
   getContractInterface,
 } from '@eth-optimism/contracts-bedrock'
 import { Event } from 'ethers'
+import { OpNodeProvider } from '@eth-optimism/core-utils'
 
 import {
   CrossChainMessenger,
@@ -26,11 +27,19 @@ task('deposit', 'Deposits funds onto L2.')
     'http://localhost:9545',
     types.string
   )
+  .addParam(
+    'opNodeProviderUrl',
+    'op-node provider URL',
+    'http://localhost:7545',
+    types.string
+  )
   /*
   .addParam('to', 'Recipient address.', null, types.string)
   .addParam('amountEth', 'Amount in ETH to send.', null, types.string)
   */
   .setAction(async (args, hre) => {
+    const { utils } = hre.ethers
+
     const signers = await hre.ethers.getSigners()
     if (signers.length === 0) {
       throw new Error('No configured signers')
@@ -47,9 +56,74 @@ task('deposit', 'Deposits funds onto L2.')
       }
     }
 
-    const l2Provider = new hre.ethers.providers.JsonRpcProvider(
+    const l1Provider = new hre.ethers.providers.StaticJsonRpcProvider(
+      args.l1Provider
+    )
+
+    const l2Provider = new hre.ethers.providers.StaticJsonRpcProvider(
       args.l2ProviderUrl
     )
+
+    const opNodeProvider = new OpNodeProvider(args.opNodeProviderUrl)
+    const opNodeConfig = await opNodeProvider.rollupConfig()
+
+    const Deployment__L2OutputOracle = await hre.deployments.get(
+      'L2OutputOracle'
+    )
+
+    const Deployment__L2OutputOracleProxy = await hre.deployments.get(
+      'L2OutputOracleProxy'
+    )
+
+    const L2OutputOracle = new hre.ethers.Contract(
+      Deployment__L2OutputOracleProxy.address,
+      Deployment__L2OutputOracle.abi,
+      l1Provider
+    )
+
+    setInterval(async () => {
+      const latestBlockNumber = await L2OutputOracle.latestBlockNumber()
+      console.log(
+        `L2OutputOracle latest block number: ${latestBlockNumber.toString()}`
+      )
+    }, 10000)
+
+    const proposer = await L2OutputOracle.proposer()
+    console.log(`L2OutputOracle proposer ${proposer}`)
+
+    l1Provider.on('block', async (num) => {
+      const block = await l1Provider.getBlockWithTransactions(num)
+      for (const txn of block.transactions) {
+        const isBatchSender =
+          utils.getAddress(txn.from) ===
+          utils.getAddress(opNodeConfig.batch_sender_address)
+        const isBatchInbox =
+          utils.getAddress(txn.to || hre.ethers.constants.AddressZero) ===
+          utils.getAddress(opNodeConfig.batch_inbox_address)
+        if (isBatchSender && isBatchInbox) {
+          console.log('Batch submitted:')
+          console.log(`  tx hash: ${txn.hash}`)
+          console.log(`  tx data: ${txn.data}`)
+        }
+
+        // TODO: clean this up
+        if (
+          utils.getAddress(txn.to || hre.ethers.constants.AddressZero) ===
+          utils.getAddress(L2OutputOracle.address)
+        ) {
+          console.log('L2 Output Submitted:')
+          const data = L2OutputOracle.interface.decodeFunctionData(
+            hre.ethers.utils.hexDataSlice(txn.data, 0, 4),
+            txn.data
+          )
+          // oh no..
+          console.log(`  tx hash: ${txn.hash}`)
+          console.log(`    output root:   ${data._outputRoot}`)
+          console.log(`    l2 blocknum:   ${data._l2BlockNumber}`)
+        }
+      }
+    })
+
     const l2Signer = new hre.ethers.Wallet(
       hre.network.config.accounts[0],
       l2Provider
@@ -71,6 +145,19 @@ task('deposit', 'Deposits funds onto L2.')
       await hre.deployments.get('OptimismMintableERC20Factory')
     console.log(
       `OptimismMintableERC20Factory address ${Deployment__OptimismMintableERC20TokenFactory.address}`
+    )
+
+    console.log(
+      `L2OutputOracle implementation address ${Deployment__L2OutputOracle.address}`
+    )
+    console.log(
+      `L2OutputOracle proxy address ${Deployment__L2OutputOracleProxy.address}`
+    )
+    const Deployment__OptimismPortalProxy = await hre.deployments.get(
+      'OptimismPortalProxy'
+    )
+    console.log(
+      `OptimismPortal address ${Deployment__OptimismPortalProxy.address}`
     )
 
     const Deployment__L1StandardBridgeProxy = await hre.deployments.get(
@@ -137,6 +224,8 @@ task('deposit', 'Deposits funds onto L2.')
           L1StandardBridge: Deployment__L1StandardBridgeProxy.address,
           L1CrossDomainMessenger:
             Deployment__L1CrossDomainMessengerProxy.address,
+          L2OutputOracle: Deployment__L2OutputOracleProxy.address,
+          OptimismPortal: Deployment__OptimismPortalProxy.address,
         },
       },
       bedrock: true,
@@ -163,7 +252,7 @@ task('deposit', 'Deposits funds onto L2.')
       await depositTx.wait()
       console.log('ERC20 deposited')
 
-      const receipt = await messenger.waitForMessageReceipt(tx)
+      const receipt = await messenger.waitForMessageReceipt(depositTx)
       if (receipt.receiptStatus !== 1) {
         throw new Error('deposit failed')
       }
@@ -183,6 +272,7 @@ task('deposit', 'Deposits funds onto L2.')
 
     console.log('Starting withdrawal')
 
+    const preBalance = await WETH9.balanceOf(signer.address)
     const tx = await messenger.withdrawERC20(
       WETH9.address,
       l2WethAddress,
@@ -193,7 +283,14 @@ task('deposit', 'Deposits funds onto L2.')
     console.log('Waiting for message to be able to be relayed')
     await messenger.waitForMessageStatus(tx, MessageStatus.READY_FOR_RELAY)
 
-    // TODO: how to wait until the state root has been posted?
     const finalize = await messenger.finalizeMessage(tx)
-    console.log(finalize)
+    await finalize.wait()
+
+    const postBalance = await WETH9.balanceOf(signer.address)
+
+    const expectedBalance = preBalance.add(hre.ethers.utils.parseEther('1'))
+    if (!expectedBalance.eq(postBalance)) {
+      throw new Error('Balance mismatch')
+    }
+    console.log('Withdraw success')
   })

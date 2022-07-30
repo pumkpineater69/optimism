@@ -24,9 +24,11 @@ import {
 
 /**
  * Full list of default L2 contract addresses.
+ * TODO(tynes): migrate to predeploys from contracts-bedrock
  */
 export const DEFAULT_L2_CONTRACT_ADDRESSES: OEL2ContractsLike = {
   L2CrossDomainMessenger: predeploys.L2CrossDomainMessenger,
+  L2ToL1MessagePasser: predeploys.OVM_L2ToL1MessagePasser,
   L2StandardBridge: predeploys.L2StandardBridge,
   OVM_L1BlockNumber: predeploys.OVM_L1BlockNumber,
   OVM_L2ToL1MessagePasser: predeploys.OVM_L2ToL1MessagePasser,

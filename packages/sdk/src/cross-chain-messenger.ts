@@ -5,6 +5,7 @@ import {
   TransactionReceipt,
   TransactionResponse,
   TransactionRequest,
+  Log,
 } from '@ethersproject/abstract-provider'
 import { Signer } from '@ethersproject/abstract-signer'
 import { ethers, BigNumber, Overrides, CallOverrides } from 'ethers'
@@ -24,6 +25,7 @@ import { getContractInterface, predeploys } from '@eth-optimism/contracts'
 import * as rlp from 'rlp'
 
 import {
+  CoreCrossChainMessage,
   ICrossChainMessenger,
   OEContracts,
   OEContractsLike,
@@ -444,6 +446,7 @@ export class CrossChainMessenger implements ICrossChainMessenger {
 
         const challengePeriod = await this.getChallengePeriodSeconds()
         const latestBlock = await this.l1Provider.getBlock('latest')
+
         if (timestamp + challengePeriod > latestBlock.timestamp) {
           return MessageStatus.IN_CHALLENGE_PERIOD
         } else {
@@ -564,7 +567,9 @@ export class CrossChainMessenger implements ICrossChainMessenger {
     let totalTimeMs = 0
     while (totalTimeMs < (opts.timeoutMs || Infinity)) {
       const tick = Date.now()
+      console.log('GETTING MESSAGE STATUS')
       const currentStatus = await this.getMessageStatus(resolved)
+      console.log(MessageStatus[currentStatus])
 
       // Handle special cases for L1 to L2 messages.
       if (resolved.direction === MessageDirection.L1_TO_L2) {
@@ -728,16 +733,19 @@ export class CrossChainMessenger implements ICrossChainMessenger {
 
     const l2OutputOracleParameters = await this.getL2OutputOracleParameters()
 
+    // TODO: better way to do this
+    let number =
+      resolved.blockNumber - l2OutputOracleParameters.startingBlockNumber
+    while (number % l2OutputOracleParameters.submissionInterval !== 0) {
+      number++
+    }
+
     // TODO: Handle old messages from before Bedrock upgrade.
     const events = await this.contracts.l1.L2OutputOracle.queryFilter(
       this.contracts.l1.L2OutputOracle.filters.OutputProposed(
         undefined,
         undefined,
-        Math.ceil(
-          (resolved.blockNumber -
-            l2OutputOracleParameters.startingBlockNumber) /
-            l2OutputOracleParameters.submissionInterval
-        ) * l2OutputOracleParameters.submissionInterval
+        number
       )
     )
 
@@ -751,9 +759,9 @@ export class CrossChainMessenger implements ICrossChainMessenger {
     }
 
     return {
-      outputRoot: events[0].args._l2Output,
-      l1Timestamp: events[0].args._l1Timestamp.toNumber(),
-      l2BlockNumber: events[0].args._l2BlockNumber.toNumber(),
+      outputRoot: events[0].args.l2Output,
+      l1Timestamp: events[0].args.l1Timestamp.toNumber(),
+      l2BlockNumber: events[0].args.l2BlockNumber.toNumber(),
     }
   }
 
@@ -969,7 +977,7 @@ export class CrossChainMessenger implements ICrossChainMessenger {
 
   public async getBedrockMessageProof(
     message: MessageLike
-  ): Promise<BedrockCrossChainMessageProof> {
+  ): Promise<[BedrockCrossChainMessageProof, BedrockOutputData, CoreCrossChainMessage]> {
     const resolved = await this.toCrossChainMessage(message)
     if (resolved.direction === MessageDirection.L1_TO_L2) {
       throw new Error(`can only generate proofs for L2 to L1 messages`)
@@ -980,44 +988,127 @@ export class CrossChainMessenger implements ICrossChainMessenger {
       throw new Error(`state root for message not yet published`)
     }
 
-    const messageSlot = ethers.utils.keccak256(
-      ethers.utils.hexConcat([
-        hashWithdrawal(
-          resolved.messageNonce,
-          resolved.sender,
-          resolved.target,
-          resolved.value,
-          resolved.minGasLimit,
-          resolved.message
-        ),
-        ethers.constants.HashZero,
-      ])
+    const receipt = await this.l2Provider.getTransactionReceipt(
+      resolved.transactionHash
     )
+
+    interface WithdrawalEntry {
+      withdrawalInitiated: any
+      withdrawalInitiatedExtension1: any
+    }
+
+    // Handle multiple withdrawals in the same tx and be backwards
+    // compatible without WithdrawalInitiatedExtension1
+    const logs: Partial<{ number: WithdrawalEntry }> = {}
+    for (const [i, log] of Object.entries(receipt.logs)) {
+      if (log.address === predeploys.OVM_L2ToL1MessagePasser) {
+        const decoded =
+          this.contracts.l2.L2ToL1MessagePasser.interface.parseLog(log)
+        // Find the withdrawal initiated events
+        if (decoded.name === 'WithdrawalInitiated') {
+          logs[log.logIndex] = {
+            withdrawalInitiated: decoded.args,
+            withdrawalInitiatedExtension1: null,
+          }
+          if (receipt.logs[i + 1]) {
+            const next =
+              this.contracts.l2.L2ToL1MessagePasser.interface.parseLog(
+                receipt.logs[i + 1]
+              )
+            if (next.name === 'WithdrawalInitiatedExtension1') {
+              logs[log.logIndex].withdrawalInitiatedExtension1 = next.args
+            }
+          }
+        }
+      }
+    }
+
+    // TODO(tynes): be able to handle transactions that do multiple withdrawals
+    // in a single transaction. Right now just go for the first one.
+    const withdrawal = Object.values(logs)[0]
+    if (!withdrawal) {
+      throw new Error(
+        `Cannot find withdrawal logs for ${resolved.transactionHash}`
+      )
+    }
+
+    console.log('Withdrawal TX:')
+    console.log(withdrawal.withdrawalInitiated)
+
+    const withdrawalHash = hashWithdrawal(
+      withdrawal.withdrawalInitiated.nonce,
+      withdrawal.withdrawalInitiated.sender,
+      withdrawal.withdrawalInitiated.target,
+      withdrawal.withdrawalInitiated.value,
+      withdrawal.withdrawalInitiated.gasLimit,
+      withdrawal.withdrawalInitiated.data
+    )
+
+    console.log('withdrawalHash:')
+    console.log(withdrawalHash)
+
+    // Sanity check
+    if (withdrawal.withdrawalInitiatedExtension1) {
+      if (withdrawal.withdrawalInitiatedExtension1.hash !== withdrawalHash) {
+        throw new Error(`Mismatched withdrawal hashes`)
+      }
+    }
+
+    // TODO: turn into util
+    const preimage = ethers.utils.defaultAbiCoder.encode(
+      ['bytes32', 'uint256'],
+      [withdrawalHash, ethers.constants.HashZero]
+    )
+    const isMessageSent =
+      await this.contracts.l2.L2ToL1MessagePasser.sentMessages(withdrawalHash)
+
+    if (!isMessageSent) {
+      throw new Error(`Withdrawal not initiated on L2`)
+    }
+
+    const messageSlot = ethers.utils.keccak256(preimage)
 
     const stateTrieProof = await makeStateTrieProof(
       this.l2Provider as ethers.providers.JsonRpcProvider,
-      resolved.blockNumber,
+      output.l2BlockNumber,
       this.contracts.l2.OVM_L2ToL1MessagePasser.address,
       messageSlot
     )
 
+    // Sanity check that the value is set to 1 in the state
+    if (!stateTrieProof.storageValue.eq(1)) {
+      throw new Error(`Withdrawal hash ${withdrawalHash} is not set in state`)
+    }
+
     const block = await (
       this.l2Provider as ethers.providers.JsonRpcProvider
     ).send('eth_getBlockByNumber', [
-      toRpcHexString(resolved.blockNumber),
-      'false',
+      toRpcHexString(output.l2BlockNumber),
+      false,
     ])
 
-    return {
-      outputRootProof: {
-        // TODO: Get correct version here
-        version: ethers.constants.HashZero,
-        stateRoot: block.stateRoot,
-        withdrawerStorageRoot: stateTrieProof.storageProof[0],
-        latestBlockhash: block.hash,
+    return [
+      {
+        outputRootProof: {
+          // TODO: Handle multiple versions in the future
+          version: ethers.constants.HashZero,
+          stateRoot: block.stateRoot,
+          withdrawerStorageRoot: stateTrieProof.storageRoot,
+          latestBlockhash: block.hash,
+        },
+        //withdrawalProof: ethers.utils.RLP.encode(stateTrieProof.storageProof),
+        withdrawalProof: toHexString(rlp.encode(stateTrieProof.storageProof)),
       },
-      withdrawalProof: toHexString(rlp.encode(stateTrieProof.storageProof)),
-    }
+      output,
+      {
+        messageNonce: withdrawal.withdrawalInitiated.nonce,
+        sender: withdrawal.withdrawalInitiated.sender,
+        target: withdrawal.withdrawalInitiated.target,
+        value: withdrawal.withdrawalInitiated.value,
+        minGasLimit: withdrawal.withdrawalInitiated.gasLimit,
+        message: withdrawal.withdrawalInitiated.data,
+      },
+    ]
   }
 
   public async sendMessage(
@@ -1238,16 +1329,26 @@ export class CrossChainMessenger implements ICrossChainMessenger {
       }
 
       if (this.bedrock) {
-        const proof = await this.getBedrockMessageProof(resolved)
+        const [proof, output, withdrawalTx] = await this.getBedrockMessageProof(
+          message
+        )
+
         return this.contracts.l1.OptimismPortal.populateTransaction.finalizeWithdrawalTransaction(
-          resolved.messageNonce,
-          resolved.sender,
-          resolved.target,
-          resolved.value,
-          resolved.minGasLimit,
-          resolved.message,
-          resolved.blockNumber,
-          proof.outputRootProof,
+          [
+            withdrawalTx.messageNonce,
+            withdrawalTx.sender,
+            withdrawalTx.target,
+            withdrawalTx.value,
+            withdrawalTx.minGasLimit,
+            withdrawalTx.message,
+          ],
+          output.l2BlockNumber,
+          [
+            proof.outputRootProof.version,
+            proof.outputRootProof.stateRoot,
+            proof.outputRootProof.withdrawerStorageRoot,
+            proof.outputRootProof.latestBlockhash,
+          ],
           proof.withdrawalProof
         )
       } else {

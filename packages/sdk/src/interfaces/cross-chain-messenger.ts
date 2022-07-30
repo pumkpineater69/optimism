@@ -12,6 +12,7 @@ import {
 } from '@eth-optimism/core-utils'
 
 import {
+  CoreCrossChainMessage,
   MessageLike,
   MessageRequestLike,
   TransactionLike,
@@ -369,7 +370,7 @@ export interface ICrossChainMessenger {
    */
   getBedrockMessageProof(
     message: MessageLike
-  ): Promise<BedrockCrossChainMessageProof>
+  ): Promise<[BedrockCrossChainMessageProof, BedrockOutputData, CoreCrossChainMessage]>
 
   /**
    * Sends a given cross chain message. Where the message is sent depends on the direction attached

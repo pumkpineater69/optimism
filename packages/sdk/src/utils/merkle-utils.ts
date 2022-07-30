@@ -1,5 +1,5 @@
 /* Imports: External */
-import { ethers } from 'ethers'
+import { ethers, BigNumber } from 'ethers'
 import {
   fromHexString,
   toHexString,
@@ -61,6 +61,8 @@ export const makeStateTrieProof = async (
 ): Promise<{
   accountProof: string[]
   storageProof: string[]
+  storageValue: BigNumber
+  storageRoot: string
 }> => {
   const proof = await provider.send('eth_getProof', [
     address,
@@ -68,8 +70,16 @@ export const makeStateTrieProof = async (
     toRpcHexString(blockNumber),
   ])
 
+  // TODO: i think this needs to be reverted because it
+  // expects an inclusion proof and its getting an exclusion proof?
+  // console.log('fetching proof')
+  console.log(`["${address}", ["${slot}"], "${toRpcHexString(blockNumber)}"]`)
+  console.log(JSON.stringify(proof, null, 2))
+
   return {
     accountProof: proof.accountProof,
     storageProof: proof.storageProof[0].proof,
+    storageValue: BigNumber.from(proof.storageProof[0].value),
+    storageRoot: proof.storageHash,
   }
 }

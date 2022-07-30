@@ -50,6 +50,13 @@ contract L2ToL1MessagePasser is Semver {
     );
 
     /**
+     * @notice
+     *
+     * @param
+     */
+    event WithdrawalInitiatedExtension1(bytes32 indexed hash);
+
+    /**
      * @notice Emitted when the balance of this contract is burned.
      *
      * @param amount Amount of ETh that was burned.
@@ -106,6 +113,8 @@ contract L2ToL1MessagePasser is Semver {
         sentMessages[withdrawalHash] = true;
 
         emit WithdrawalInitiated(nonce, msg.sender, _target, msg.value, _gasLimit, _data);
+        emit WithdrawalInitiatedExtension1(withdrawalHash);
+
         unchecked {
             ++nonce;
         }
