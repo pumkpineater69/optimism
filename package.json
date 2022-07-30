@@ -38,18 +38,6 @@
   },
   "private": true,
   "scripts": {
-    "clean": "yarn lerna run clean --parallel",
-    "build": "yarn lerna run build",
-    "test": "yarn lerna run test --parallel",
-    "test:coverage": "yarn lerna run test:coverage --parallel",
-    "lint": "yarn lerna run lint",
-    "lint:ts:check": "yarn lerna run lint:ts:check",
-    "lint:check": "yarn lerna run lint:check",
-    "lint:fix": "yarn lerna run lint:fix --parallel",
-    "postinstall": "sh ./test.sh",
-    "ready": "yarn lint && yarn test",
-    "prepare": "sh ./test.sh",
-    "release": "yarn build && yarn changeset publish",
     "update:yarn": "yarn set version 1.x"
   },
   "devDependencies": {
